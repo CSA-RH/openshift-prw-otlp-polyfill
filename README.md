@@ -128,7 +128,7 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   name: telegraf-polyfill-build
-  namespace: metrics-otlp
+  namespace: metrics-otlp-bridge
 spec:
   output:
     to:
