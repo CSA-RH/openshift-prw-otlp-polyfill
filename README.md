@@ -167,6 +167,74 @@ Run this command to trigger the build:
 oc start-build telegraf-polyfill-build -n metrics-otlp-bridge --follow
 ```
 
+## 4. Deploy the Telegraf Polyfill
+
+Apply the ConfigMap, Deployment, and Service in the bridge namespace. The Telegraf container will run using the multi-stage image generated in the previous step, fetching it directly from the OpenShift internal registry.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-translator-config
+  namespace: metrics-otlp-bridge
+data:
+  telegraf.conf: |
+    [agent]
+      interval = "10s"
+      flush_interval = "10s"
+      omit_hostname = true
+      
+    [[inputs.http_listener_v2]]
+      service_address = ":19291"
+      paths = ["/receive"]
+      data_format = "prometheusremotewrite"
+      
+    [[outputs.opentelemetry]]
+      # Cross-namespace routing: pointing to the OTel Collector in the backend namespace
+      service_address = "otel-poc-collector.metrics-otlp.svc.cluster.local:4317"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegraf-translator
+  namespace: metrics-otlp-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telegraf-translator
+  template:
+    metadata:
+      labels:
+        app: telegraf-translator
+    spec:
+      containers:
+        - name: telegraf
+          # Pulling the image from the internal registry within the bridge namespace
+          image: image-registry.openshift-image-registry.svc:5000/metrics-otlp-bridge/telegraf-polyfill:latest
+          ports:
+            - containerPort: 19291
+          volumeMounts:
+            - name: config
+              mountPath: /etc/telegraf
+      volumes:
+        - name: config
+          configMap:
+            name: telegraf-translator-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telegraf-translator-service
+  namespace: metrics-otlp-bridge
+spec:
+  selector:
+    app: telegraf-translator
+  ports:
+    - port: 19291
+      targetPort: 19291
+```
+
 ## 5. Configure OpenShift Monitoring and User Workload Monitoring
 
 To enable Remote Write, you must update the Cluster Monitoring Operator's configuration maps.
