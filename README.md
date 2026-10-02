@@ -121,7 +121,7 @@ metadata:
 apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
-  name: telegraf-polyfill
+  name: telegraf-polyfill-ubi
   namespace: metrics-otlp-bridge
 ---
 apiVersion: build.openshift.io/v1
