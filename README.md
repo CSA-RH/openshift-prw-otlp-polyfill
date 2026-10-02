@@ -158,5 +158,110 @@ oc start-build telegraf-polyfill-build -n metrics-otlp-bridge --follow
 
 To enable Remote Write, you must update the Cluster Monitoring Operator's configuration maps.
 
-> **Note:** *Cluster Monitoring generates a massive volume of metrics. Sending all of them via Remote Write without filtering can cause severe write latency, drain cluster resources, and delay the pipeline. It is highly recommended to use `writeRelabelConfigs` to drop high-cardinality or unnecessary metrics.* 
+> **Note:** *Cluster Monitoring generates a massive volume of metrics. Sending all of them via Remote Write without filtering can cause severe write latency, drain cluster resources, and delay the pipeline. It is highly recommended to use `writeRelabelConfigs` to drop high-cardinality or unnecessary metrics.*
 
+### For Cluster Monitoring (Core OpenShift metrics):
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+    prometheusK8s:
+      remoteWrite:
+        - url: "http://telegraf-translator-service.metrics-otlp-bridge.svc.cluster.local:19291/receive"
+          writeRelabelConfigs:
+            - sourceLabels: [__name__]
+              regex: 'apiserver_request_duration_seconds_bucket|etcd_request_duration_seconds_bucket'
+              action: drop
+```
+
+### For User Workload Monitoring (Application metrics):
+Update or create the `user-workload-monitoring-config` ConfigMap in the `openshift-user-workload-monitoring` namespace.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-workload-monitoring-config
+  namespace: openshift-user-workload-monitoring
+data:
+  config.yaml: |
+    prometheus:
+      remoteWrite:
+        - url: "http://telegraf-translator-service.metrics-otlp-bridge.svc.cluster.local:19291/receive"
+```
+
+## Optional: Auditing PRW Traffic (Optional Sniffer)
+
+To verify the exact PRW version emitted by OpenShift, you can deploy a lightweight netcat sniffer. This declarative setup includes a sed pipeline that safely drops the binary snappy/protobuf payload and only prints the clear-text HTTP headers to the pod logs.
+
+### 6.1. Deploy the Sniffer
+
+Apply the following Deployment and Service in the bridge namespace:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prw-sniffer
+  namespace: metrics-otlp-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prw-sniffer
+  template:
+    metadata:
+      labels:
+        app: prw-sniffer
+    spec:
+      containers:
+        - name: sniffer
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                nc -l -p 19291 | sed '/^\r*$/q'
+                echo '-----------------------'
+              done
+          ports:
+            - containerPort: 19291
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prw-sniffer-service
+  namespace: metrics-otlp-bridge
+spec:
+  selector:
+    app: prw-sniffer
+  ports:
+    - port: 19291
+      targetPort: 19291
+```
+
+### 6.2. Redirect Traffic to the Sniffer
+
+Temporarily update your OpenShift monitoring ConfigMap (as shown in Step 5) to point the `url` to the sniffer service instead of the Telegraf translator:
+
+```yaml
+remoteWrite:
+  - url: "http://prw-sniffer-service.metrics-otlp-bridge.svc.cluster.local:19291/receive"
+```
+
+### 6.3. Read teh HTTP Readers
+
+Tail the logs of the sniffer pod using its label to see the raw HTTP headers of the incoming metrics push:
+
+```yaml
+oc logs -l app=prw-sniffer -n metrics-otlp-bridge -f
+```
+
+Look for the ´X-Prometheus-Remote-Write-Version´ header in the output to determine if OCP is sending ´0.1.0´ or ´2.0´.
