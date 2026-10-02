@@ -264,4 +264,4 @@ Tail the logs of the sniffer pod using its label to see the raw HTTP headers of 
 oc logs -l app=prw-sniffer -n metrics-otlp-bridge -f
 ```
 
-Look for the ´X-Prometheus-Remote-Write-Version´ header in the output to determine if OCP is sending ´0.1.0´ or ´2.0´.
+Look for the `X-Prometheus-Remote-Write-Version` header in the output to determine if OCP is sending `0.1.0` or `2.0`.
