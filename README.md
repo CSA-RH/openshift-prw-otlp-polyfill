@@ -62,6 +62,21 @@ spec:
   ports:
     - port: 9090
       targetPort: 9090
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: prometheus-otlp-ui
+  namespace: metrics-otlp
+spec:
+  to:
+    kind: Service
+    name: prometheus-otlp
+  port:
+    targetPort: 9090
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
 ```
 
 ## 2. Create the OpenTelemetry Collector
