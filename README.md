@@ -123,6 +123,9 @@ kind: ImageStream
 metadata:
   name: telegraf-polyfill-ubi
   namespace: metrics-otlp-bridge
+spec:
+  lookupPolicy:
+    local: true
 ---
 apiVersion: build.openshift.io/v1
 kind: BuildConfig
