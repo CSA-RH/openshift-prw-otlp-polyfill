@@ -214,7 +214,7 @@ spec:
       containers:
         - name: telegraf
           # Pulling the image from the internal registry within the bridge namespace
-          image: image-registry.openshift-image-registry.svc:5000/metrics-otlp-bridge/telegraf-polyfill:latest
+          image: telegraf-polyfill-ubi:latest
           ports:
             - containerPort: 19291
           volumeMounts:
