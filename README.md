@@ -110,10 +110,7 @@ Instead of relying on external registries, we use OpenShift native BuildConfig t
 
 > **Disclaimer regarding image location:** *The resulting image will be stored securely within the OpenShift internal registry. If you decide to deploy the polyfill in a different namespace, you must grant RBAC permissions to allow the default service account to pull from the image stream.*
 > (Example:
-> `oc policy add-role-to-user \
->     system:image-puller \
->     system:serviceaccount:YOUR_TARGET_NAMESPACE:default \
->     --namespace=metrics-otlp)`
+> `oc policy add-role-to-user system:image-puller system:serviceaccount:YOUR_TARGET_NAMESPACE:default --namespace=metrics-otlp)`
 
 ```yaml
 apiVersion: v1
