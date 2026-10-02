@@ -201,6 +201,8 @@ data:
       interval = "10s"
       flush_interval = "10s"
       omit_hostname = true
+      metric_buffer_limit = 500000
+      metric_batch_size = 20000
       
     [[inputs.http_listener_v2]]
       service_address = ":19291"
@@ -208,7 +210,6 @@ data:
       data_format = "prometheusremotewrite"
       
     [[outputs.opentelemetry]]
-      # Cross-namespace routing: pointing to the OTel Collector in the backend namespace
       service_address = "otel-poc-collector.metrics-otlp.svc.cluster.local:4317"
 ---
 apiVersion: apps/v1
