@@ -43,7 +43,13 @@ spec:
             - "--storage.tsdb.path=/prometheus"
             - "--web.enable-otlp-receiver"
           ports:
-            - containerPort: 9090
+            - containerPort: 9090          
+          volumeMounts:
+            - name: prometheus-storage
+              mountPath: /prometheus      
+      volumes:
+        - name: prometheus-storage
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
