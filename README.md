@@ -140,7 +140,7 @@ spec:
   output:
     to:
       kind: ImageStreamTag
-      name: telegraf-polyfill:latest
+      name: telegraf-polyfill-ubi:latest
   strategy:
     dockerStrategy: {}
   source:
