@@ -20,6 +20,24 @@ kind: Namespace
 metadata:
   name: metrics-otlp
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: metrics-otlp
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    storage:
+      tsdb:
+        # Esto le da a Prometheus el comportamiento flexible de VictoriaMetrics
+        out_of_order_time_window: 30m
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,9 +65,16 @@ spec:
           volumeMounts:
             - name: prometheus-storage
               mountPath: /prometheus      
+            # Montamos el ConfigMap en la ruta que espera Prometheus
+            - name: config-volume
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
       volumes:
         - name: prometheus-storage
           emptyDir: {}
+        - name: config-volume
+          configMap:
+            name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
