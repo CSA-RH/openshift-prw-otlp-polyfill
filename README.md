@@ -313,11 +313,41 @@ data:
         - url: "http://telegraf-translator-service.metrics-otlp-bridge.svc.cluster.local:19291/receive"
 ```
 
-## 6. (Optional) Auditing PRW Traffic (Sniffer)
+## 6. (Optional) Auditing PRW Traffic 
+
+
+### 6.1 Verify Imported Metrics via PromQL
+
+Because we transformed the default Telegraf prefix into a custom `poc_prw_` prefix, we can easily isolate and query all the metrics flowing through our OTLP bridge without mixing them up with VictoriaMetrics' internal metrics.
+
+Use the following PromQL queries in the VictoriaMetrics UI (VMUI) Explore tab:
+
+#### 1. Count the total number of unique metrics ingested through the PoC bridge:
+
+```bash
+# Returns a list of all metrics starting with 'poc_prw_' and their respective time-series count (cardinality).
+count by (__name__) ({__name__=~"^poc_prw_.*"})
+```
+
+2. List all raw data points for a specific imported metric:
+
+```bash
+# Retrieves all time-series data for the API server request total, using the new PoC prefix.
+{__name__="poc_prw_apiserver_request_total"}
+```
+
+3. Calculate the total ingestion rate of our PoC bridge:
+
+```bash
+# Measures the overall ingestion rate (samples per second) across all PoC metrics over the last 5 minutes.
+sum(rate({__name__=~"^poc_prw_.*"}[5m]))
+```
+
+### 6.2. With a Sniffer 
 
 To verify the exact PRW version emitted by OpenShift, you can deploy a lightweight netcat sniffer. This declarative setup includes a sed pipeline that safely drops the binary snappy/protobuf payload and only prints the clear-text HTTP headers to the pod logs.
 
-### 6.1. Deploy the Sniffer
+#### Deploy the Sniffer
 
 Apply the following Deployment and Service in the bridge namespace:
 
