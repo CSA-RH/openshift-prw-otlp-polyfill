@@ -105,6 +105,10 @@ spec:
       # Inject required labels to maintain context from the original metrics
       transform:
         metric_statements:
+          # 1. Replace the default Telegraf prefix with our custom PoC identifier
+          - context: metric
+            statements:              
+              - replace_pattern(name, "^prometheus_remote_write_(.*)", "poc_prw_$$1")
           - context: resource
             statements:
               - set(attributes["job"], attributes["service.name"])
