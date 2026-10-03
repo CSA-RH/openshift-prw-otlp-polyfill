@@ -31,7 +31,6 @@ data:
       scrape_interval: 15s
     storage:
       tsdb:
-        # Esto le da a Prometheus el comportamiento flexible de VictoriaMetrics
         out_of_order_time_window: 30m
     scrape_configs:
       - job_name: 'prometheus'
