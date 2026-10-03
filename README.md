@@ -98,6 +98,8 @@ spec:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
+            # NOTE: Expand receiver limit to 32 MB instead of 4. 
+            max_recv_msg_size_mib: 32
             
     processors:
       # Inject required labels to maintain context from the original metrics
