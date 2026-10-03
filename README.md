@@ -210,10 +210,10 @@ metadata:
 data:
   telegraf.conf: |
     [agent]
-      interval = "10s"
-      flush_interval = "10s"
+      interval = "5s"
+      flush_interval = "5s"
       omit_hostname = true
-      metric_buffer_limit = 500000
+      metric_buffer_limit = 1000000
       metric_batch_size = 20000
       
     [[inputs.http_listener_v2]]
@@ -223,6 +223,7 @@ data:
       
     [[outputs.opentelemetry]]
       service_address = "otel-poc-collector.metrics-otlp.svc.cluster.local:4317"
+      timeout = "5s"
 ---
 apiVersion: apps/v1
 kind: Deployment
