@@ -365,4 +365,3 @@ oc logs -l app=prw-sniffer -n metrics-otlp-bridge -f
 ```
 
 Look for the `X-Prometheus-Remote-Write-Version` header in the output to determine if OCP is sending `0.1.0` or `2.0`.
-```
