@@ -8,11 +8,9 @@ This repository provides a secure, enterprise-grade polyfill using **Telegraf (M
 
 Before starting, ensure the **Red Hat build of OpenTelemetry** operator is installed on your cluster. This operator is required to spin up the OpenTelemetry Collector instances.
 
-## 1. Deploy the Standalone Prometheus OTLP Backend
+## 1. Deploy the Standalone VictoriaMetrics OTLP Backend
 
-To visualize the metrics, we will deploy a standalone Prometheus instance with native OTLP ingestion enabled.
-
-> **Disclaimer**: *We are using a standalone Prometheus deployment instead of a `MonitoringStack` provided by the Cluster Observability Operator (COO). The COO is highly opinionated and currently does not allow injecting the arbitrary feature flags (such as `--web.enable-otlp-receiver`) required to accept direct OTLP pushes.*
+We will deploy a single-node VictoriaMetrics instance to visualize the metrics. VictoriaMetrics serves as a drop-in replacement for Prometheus but natively accepts out-of-order samples and has OTLP ingestion enabled by default on its main port (8428), making it highly resilient for high-throughput environments.
 
 ```yaml
 apiVersion: v1
@@ -20,84 +18,63 @@ kind: Namespace
 metadata:
   name: metrics-otlp
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: prometheus-config
-  namespace: metrics-otlp
-data:
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-    storage:
-      tsdb:
-        out_of_order_time_window: 30m
-    scrape_configs:
-      - job_name: 'prometheus'
-        static_configs:
-          - targets: ['localhost:9090']
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: prometheus-otlp
+  name: victoria-metrics
   namespace: metrics-otlp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: prometheus-otlp
+      app: victoria-metrics
   template:
     metadata:
       labels:
-        app: prometheus-otlp
+        app: victoria-metrics
     spec:
       containers:
-        - name: prometheus
-          image: prom/prometheus:v3.13.2
+        - name: victoriametrics
+          image: victoriametrics/victoria-metrics:v1.101.0
           args:
-            - "--config.file=/etc/prometheus/prometheus.yml"
-            - "--storage.tsdb.path=/prometheus"
-            - "--web.enable-otlp-receiver"
+            # Data retention and storage path
+            - "-retentionPeriod=15d"
+            - "-storageDataPath=/storage"
+            # Enable the web UI and OTLP ingestion on the same port
+            - "-httpListenAddr=:8428"
           ports:
-            - containerPort: 9090          
+            - containerPort: 8428
           volumeMounts:
-            - name: prometheus-storage
-              mountPath: /prometheus      
-            # Montamos el ConfigMap en la ruta que espera Prometheus
-            - name: config-volume
-              mountPath: /etc/prometheus/prometheus.yml
-              subPath: prometheus.yml
+            - name: vm-storage
+              mountPath: /storage
       volumes:
-        - name: prometheus-storage
+        # Using emptyDir for PoC purposes. Use a PVC for production workloads.
+        - name: vm-storage
           emptyDir: {}
-        - name: config-volume
-          configMap:
-            name: prometheus-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus-otlp
+  name: victoria-metrics
   namespace: metrics-otlp
 spec:
   selector:
-    app: prometheus-otlp
+    app: victoria-metrics
   ports:
-    - port: 9090
-      targetPort: 9090
+    - port: 8428
+      targetPort: 8428
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: prometheus-otlp-ui
+  name: victoria-metrics-ui
   namespace: metrics-otlp
 spec:
   to:
     kind: Service
-    name: prometheus-otlp
+    name: victoria-metrics
   port:
-    targetPort: 9090
+    targetPort: 8428
   tls:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
@@ -105,7 +82,7 @@ spec:
 
 ## 2. Create the OpenTelemetry Collector
 
-This Collector will receive the translated OTLP gRPC traffic from our Telegraf polyfill, inject the required Prometheus labels, and export it to the standalone Prometheus via OTLP HTTP.
+This Collector receives the translated OTLP gRPC traffic from the Telegraf polyfill and exports it to VictoriaMetrics. We use a batch processor to handle the massive OpenShift throughput smoothly and ensure stable memory consumption.
 
 ```yaml
 apiVersion: opentelemetry.io/v1beta1
@@ -121,26 +98,35 @@ spec:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
+            
     processors:
+      # Inject required labels to maintain context from the original metrics
       transform:
         metric_statements:
           - context: resource
             statements:
               - set(attributes["job"], attributes["service.name"])
               - set(attributes["instance"], attributes["service.instance.id"])
+      # Mandatory for high-throughput environments to prevent memory exhaustion
+      batch:
+        send_batch_size: 10000
+        timeout: 1s
+        
     exporters:
-      otlphttp/prometheus:
-        endpoint: "http://prometheus-otlp.metrics-otlp.svc.cluster.local:9090/api/v1/otlp/v1/metrics"
+      # VictoriaMetrics natively supports OTLP via HTTP. 
+      # The collector automatically appends '/v1/metrics' to the endpoint,
+      # resulting in the exact native VM path: '/opentelemetry/v1/metrics'.
+      otlphttp/victoriametrics:
+        endpoint: "http://victoria-metrics.metrics-otlp.svc.cluster.local:8428/opentelemetry"
         tls:
           insecure: true
-      debug:
-        verbosity: detailed
+          
     service:
       pipelines:
         metrics:
           receivers: [otlp]
-          processors: [transform]
-          exporters: [debug, otlphttp/prometheus]
+          processors: [transform, batch]
+          exporters: [otlphttp/victoriametrics]
 ```
 
 ## 3. Build the Secure Polyfill Image via BuildConfig
